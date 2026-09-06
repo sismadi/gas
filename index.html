@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sismadi Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">S/</span>
+        <span class="brand-name">Sismadi&nbsp;Control</span>
+      </div>
+      <nav class="nav" id="nav-menu">
+        <!-- di-render dinamis dari GET /api/menu -->
+      </nav>
+      <div class="sidebar-foot">
+        <span class="dot dot--live"></span> API tersambung
+      </div>
+    </aside>
+
+    <div class="overlay" id="overlay"></div>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="page-title">Beranda</h1>
+          <p id="page-sub" class="muted">Ringkasan sistem</p>
+        </div>
+        <div class="topbar-actions" id="topbar-actions">
+          <!-- search + tombol tambah muncul dinamis saat masuk ke tabel -->
+        </div>
+      </header>
+
+      <section class="content" id="content">
+        <div class="empty-state">Memuat modul…</div>
+      </section>
+    </main>
+
+    <aside class="drawer" id="drawer">
+      <div class="drawer-head">
+        <h3 id="drawer-title">Tambah Data</h3>
+        <button class="icon-btn" id="drawer-close" aria-label="Tutup">✕</button>
+      </div>
+      <form class="drawer-form" id="drawer-form"></form>
+      <div class="drawer-error" id="drawer-error"></div>
+      <div class="drawer-foot">
+        <button type="button" class="btn btn--danger" id="drawer-delete" hidden>Hapus</button>
+        <div class="drawer-foot-right">
+          <button type="button" class="btn btn--ghost" id="drawer-cancel">Batal</button>
+          <button type="submit" form="drawer-form" class="btn btn--primary" id="drawer-save">Simpan</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

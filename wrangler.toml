@@ -1,0 +1,20 @@
+name = "sismadi-microservice"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Deploy dengan:
+#   wrangler d1 create sismadi_db
+#   (salin database_id hasilnya ke bawah ini)
+#   wrangler d1 execute sismadi_db --remote --file=./schema.sql
+#   wrangler deploy
+
+[[d1_databases]]
+binding = "DB"                     # diakses di worker.js sebagai env.DB
+database_name = "sismadi_db"
+database_id = "GANTI_DENGAN_DATABASE_ID_ANDA"
+
+[vars]
+APP_NAME = "Sismadi Microservice"
+
+# Opsional: batasi origin frontend yang boleh akses API
+# ganti "*" di worker.js (fungsi corsHeaders) sesuai domain frontend Anda.
