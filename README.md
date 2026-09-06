@@ -26,7 +26,7 @@ frontend/
 4. **Filter generik lewat query string** — endpoint list menerima query param apapun yang cocok nama kolom (`?instruktur_id=2&status=published`), dipakai untuk dashboard instruktur/peserta tanpa endpoint khusus baru.
 5. **Halaman Katalog Kursus** — card publik berisi **nama, periode, instruktur, harga, deskripsi**, dan jumlah peserta/kuota, dengan tombol **Daftar** (mengirim `POST /api/enrollments`).
 6. **Role pengguna**: `admin`, `instruktur`, `peserta` — masing-masing dapat **dashboard sendiri**:
-   - Admin → `#/dashboard-admin` (VIEW `dashboard_admin`, reuse renderer dashboard generik).
+   - Admin → `#/dashboard_admin` (VIEW `dashboard_admin`, reuse renderer dashboard generik).
    - Instruktur → `#/dashboard-instruktur` (kartu dihitung dari `kursus`/`pendaftaran` yang difilter `instruktur_id`).
    - Peserta → `#/dashboard-peserta` (daftar kursus yang diikuti dari VIEW `pendaftaran` difilter `user_id`).
 7. **Login sederhana** (`POST /api/login`) — mencocokkan email/password di tabel `users`. Sesi disimpan di `localStorage` (bukan token/JWT — cocok untuk demo, **bukan untuk produksi**; lihat catatan keamanan di bawah).

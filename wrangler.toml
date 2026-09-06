@@ -10,8 +10,8 @@ compatibility_date = "2026-01-01"
 
 [[d1_databases]]
 binding = "DB"                     # diakses di worker.js sebagai env.DB
-database_name = "gas"
-database_id = "74ad0ce5-19ae-4e52-a0d8-c96579cea754"
+database_name = "lms"
+database_id = "GANTI-DENGAN-DATABASE-ID-ANDA"
 
 [vars]
 APP_NAME = "LMS Microservice"

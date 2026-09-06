@@ -39,13 +39,13 @@ const SPECIAL_ROUTES = new Set([
   "katalog",
   "login",
   "profil",
-  "dashboard-admin",
+  "dashboard_admin",
   "dashboard-instruktur",
   "dashboard-peserta",
 ]);
 
 const DASHBOARD_VIEW_BY_ROLE = {
-  admin: "dashboard-admin",
+  admin: "dashboard_admin",
   instruktur: "dashboard-instruktur",
   peserta: "dashboard-peserta",
 };
@@ -295,13 +295,13 @@ async function navigate(route, pushHash = true) {
       return;
     }
 
-    // Semua route lain (termasuk 'dashboard-admin' via view) memakai
+    // Semua route lain (termasuk 'dashboard_admin' via view) memakai
     // engine generik: meta -> table/form, tanpa hardcode field.
     const schema = await apiFetch(`/meta/${route}`);
     state.schema = schema.data;
     el.pageTitle.textContent = state.schema.label;
 
-    if (route === "dashboard-admin") {
+    if (route === "dashboard_admin") {
       el.pageSub.textContent = "Ringkasan sistem";
       await renderDashboardGeneric();
     } else {
@@ -441,7 +441,7 @@ async function renderKatalogList(search) {
 }
 
 // =========================================================
-// DASHBOARD ADMIN — generik lewat VIEW dashboard-admin
+// DASHBOARD ADMIN — generik lewat VIEW dashboard_admin
 // (kolom pertama = judul, kedua = nilai, ketiga = satuan)
 // =========================================================
 async function renderDashboardGeneric() {

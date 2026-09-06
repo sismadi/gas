@@ -210,20 +210,62 @@ JOIN users us ON us.id = e.user_id;
 -- VIEW: dashboard_admin — kartu ringkasan global (agregat)
 -- Kolom judul/nilai/satuan cocok dengan renderer dashboard
 -- generik yang sudah ada (reuse, tanpa kode baru di frontend).
+--
+-- CATATAN PERBAIKAN: versi sebelumnya memakai 6x "UNION ALL"
+-- yang dihitung sebagai satu "compound SELECT" oleh SQLite.
+-- Cloudflare D1 menerapkan SQLITE_LIMIT_COMPOUND_SELECT yang
+-- jauh lebih ketat daripada default SQLite (500), sehingga
+-- CREATE VIEW ini gagal dengan error
+-- "too many terms in compound SELECT" saat schema.sql
+-- dijalankan (wrangler d1 execute). Karena statement ini
+-- berada SEBELUM seed data `INSERT INTO users` di file ini,
+-- kegagalannya menghentikan sisa eksekusi schema.sql — tabel
+-- `users` jadi tidak pernah terisi akun demo, dan itulah
+-- sebabnya /api/login selalu membalas 401 Unauthorized.
+--
+-- Perbaikan: bangun 6 baris kartu memakai recursive CTE
+-- (hanya 2 term dalam compound SELECT-nya: base case + kasus
+-- rekursif) lalu pilih nilai tiap baris dengan CASE + subquery
+-- skalar. Ini tidak pernah melebihi batas compound SELECT,
+-- berapa pun jumlah kartu yang ditambahkan di masa depan.
 -- =========================================================
 DROP VIEW IF EXISTS dashboard_admin;
 CREATE VIEW dashboard_admin AS
-SELECT 'Total Kursus' AS judul, CAST(COUNT(*) AS TEXT) AS nilai, 'kursus' AS satuan, 1 AS urutan, 'aktif' AS status FROM kursus
-UNION ALL
-SELECT 'Kursus Published', CAST(COUNT(*) AS TEXT), 'kursus', 2, 'aktif' FROM kursus WHERE status = 'published'
-UNION ALL
-SELECT 'Total Peserta', CAST(COUNT(*) AS TEXT), 'orang', 3, 'aktif' FROM users WHERE role = 'peserta'
-UNION ALL
-SELECT 'Total Instruktur', CAST(COUNT(*) AS TEXT), 'orang', 4, 'aktif' FROM users WHERE role = 'instruktur'
-UNION ALL
-SELECT 'Total Pendaftaran', CAST(COUNT(*) AS TEXT), 'pendaftaran', 5, 'aktif' FROM enrollments
-UNION ALL
-SELECT 'Total Modul', CAST(COUNT(*) AS TEXT), 'modul', 6, 'aktif' FROM modul;
+WITH RECURSIVE kartu(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT n + 1 FROM kartu WHERE n < 6
+)
+SELECT
+  CASE n
+    WHEN 1 THEN 'Total Kursus'
+    WHEN 2 THEN 'Kursus Published'
+    WHEN 3 THEN 'Total Peserta'
+    WHEN 4 THEN 'Total Instruktur'
+    WHEN 5 THEN 'Total Pendaftaran'
+    WHEN 6 THEN 'Total Modul'
+  END AS judul,
+  CAST(
+    CASE n
+      WHEN 1 THEN (SELECT COUNT(*) FROM kursus)
+      WHEN 2 THEN (SELECT COUNT(*) FROM kursus WHERE status = 'published')
+      WHEN 3 THEN (SELECT COUNT(*) FROM users WHERE role = 'peserta')
+      WHEN 4 THEN (SELECT COUNT(*) FROM users WHERE role = 'instruktur')
+      WHEN 5 THEN (SELECT COUNT(*) FROM enrollments)
+      WHEN 6 THEN (SELECT COUNT(*) FROM modul)
+    END AS TEXT
+  ) AS nilai,
+  CASE n
+    WHEN 1 THEN 'kursus'
+    WHEN 2 THEN 'kursus'
+    WHEN 3 THEN 'orang'
+    WHEN 4 THEN 'orang'
+    WHEN 5 THEN 'pendaftaran'
+    WHEN 6 THEN 'modul'
+  END AS satuan,
+  n AS urutan,
+  'aktif' AS status
+FROM kartu;
 
 -- =========================================================
 -- META FIELDS: menu
@@ -319,7 +361,7 @@ INSERT INTO _meta_fields (table_name, field_name, label, input_type, options, sh
 -- =========================================================
 INSERT INTO menu (nama, icon, route, roles, urutan, status) VALUES
  ('Katalog Kursus',       'book',             'katalog',            'public,admin,instruktur,peserta', 1, 'aktif'),
- ('Dashboard Admin',      'layout-dashboard', 'dashboard-admin',    'admin', 2, 'aktif'),
+ ('Dashboard Admin',      'layout-dashboard', 'dashboard_admin',    'admin', 2, 'aktif'),
  ('Dashboard Instruktur', 'layout-dashboard', 'dashboard-instruktur','instruktur', 3, 'aktif'),
  ('Dashboard Peserta',    'layout-dashboard', 'dashboard-peserta',  'peserta', 4, 'aktif'),
  ('Kursus',               'list',             'kursus',             'admin,instruktur', 5, 'aktif'),
