@@ -44,7 +44,7 @@ async function getAllowedTables(env) {
   const { results } = await env.DB.prepare(
     `SELECT name FROM sqlite_master
      WHERE type = 'table'
-       AND name NOT LIKE '\_%' ESCAPE '\'
+       AND name NOT GLOB '_*'
        AND name NOT LIKE 'sqlite_%'`
   ).all();
   return results.map((r) => r.name);
