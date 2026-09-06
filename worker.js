@@ -1,15 +1,21 @@
 /**
  * =========================================================
- * WORKER.JS — Microservice API Dinamis (Cloudflare Workers + D1)
+ * WORKER.JS — Microservice API Dinamis LMS (Cloudflare Workers + D1)
  * Prinsip: reuse, DRY, modular, scalable, konsisten, efisien
  *
  * - Routing berbasis tabel event (routes[]) => "event driven routing"
  * - Semua keluaran JSON dengan amplop response konsisten
- * - CRUD generik: bisa dipakai untuk tabel APAPUN tanpa hardcode,
- *   selama tabel terdaftar di sqlite_master (bukan tabel "_meta_*")
+ * - CRUD generik: bisa dipakai untuk TABEL maupun VIEW apapun
+ *   tanpa hardcode, selama terdaftar di sqlite_master
+ *   (bukan tabel "_meta_*"). VIEW otomatis read-only.
+ * - Filter generik: query param apapun yang cocok dengan nama
+ *   kolom tabel otomatis jadi filter exact-match (?kursus_id=1)
  * - Paging wajib pada setiap list data (page, limit)
  * - Metadata field (/api/meta/:table) dipakai frontend untuk
  *   merender table & form secara dinamis
+ * - /api/login: satu-satunya endpoint "khusus", dipakai untuk
+ *   otentikasi peserta/instruktur/admin (masih memakai tabel
+ *   `users` secara generik, tidak menambah field/tabel baru)
  * =========================================================
  */
 
@@ -37,17 +43,27 @@ function fail(message, status = 400) {
   return json({ success: false, message }, status);
 }
 
-// ---------- Helper: introspeksi skema tabel (tanpa hardcode) ----------
+// ---------- Helper: introspeksi skema tabel/view (tanpa hardcode) ----------
 
-/** Ambil semua nama tabel data (exclude tabel internal _meta_* dan sqlite_*) */
+/** Ambil semua nama tabel & view data (exclude _meta_* dan sqlite_*) */
 async function getAllowedTables(env) {
   const { results } = await env.DB.prepare(
     `SELECT name FROM sqlite_master
-     WHERE type = 'table'
+     WHERE type IN ('table','view')
        AND name NOT GLOB '_*'
        AND name NOT LIKE 'sqlite_%'`
   ).all();
   return results.map((r) => r.name);
+}
+
+/** Tipe objek: 'table' atau 'view' (view = read-only otomatis) */
+async function getTableType(env, table) {
+  const row = await env.DB.prepare(
+    `SELECT type FROM sqlite_master WHERE name = ? AND type IN ('table','view')`
+  )
+    .bind(table)
+    .first();
+  return row ? row.type : null;
 }
 
 async function assertTableAllowed(env, table) {
@@ -59,6 +75,13 @@ async function assertTableAllowed(env, table) {
     throw new HttpError(`Tabel '${table}' tidak ditemukan / tidak diizinkan`, 404);
   }
   return true;
+}
+
+async function assertWritable(env, table) {
+  const type = await getTableType(env, table);
+  if (type === "view") {
+    throw new HttpError(`'${table}' adalah view (read-only), tidak bisa diubah`, 405);
+  }
 }
 
 class HttpError extends Error {
@@ -93,6 +116,7 @@ function defaultInputType(colType, name) {
 /** Bangun schema gabungan: kolom asli (PRAGMA) + metadata (_meta_fields) + default cerdas */
 async function buildSchema(env, table) {
   const columns = await getColumns(env, table);
+  const type = await getTableType(env, table);
   let metaList = [];
   try {
     const { results } = await env.DB.prepare(
@@ -108,6 +132,7 @@ async function buildSchema(env, table) {
   metaList.forEach((m) => (metaMap[m.field_name] = m));
 
   const pkCol = columns.find((c) => c.pk === 1);
+  const readonly = type === "view";
 
   const fields = columns
     .map((c, idx) => {
@@ -120,7 +145,7 @@ async function buildSchema(env, table) {
         show_in_list: meta
           ? !!meta.show_in_list
           : !["created_at", "updated_at", "password"].includes(c.name),
-        show_in_form: meta ? !!meta.show_in_form : c.pk !== 1,
+        show_in_form: readonly ? false : meta ? !!meta.show_in_form : c.pk !== 1,
         required: meta ? !!meta.required : !!c.notnull && c.pk !== 1,
         sortable: meta ? !!meta.sortable : true,
         urutan: meta ? meta.urutan : idx,
@@ -133,31 +158,50 @@ async function buildSchema(env, table) {
     table,
     label: toLabel(table),
     primary_key: pkCol ? pkCol.name : "id",
+    readonly,
     fields,
   };
 }
 
-// ---------- CRUD generik (dipakai untuk SEMUA tabel) ----------
+// ---------- CRUD generik (dipakai untuk SEMUA tabel & view) ----------
 
-async function listData(env, table, { page = 1, limit = 10, search = "", sort, order = "asc" } = {}) {
+const RESERVED_QUERY_KEYS = new Set(["page", "limit", "search", "sort", "order"]);
+
+async function listData(
+  env,
+  table,
+  { page = 1, limit = 10, search = "", sort, order = "asc", filters = {} } = {}
+) {
   page = Math.max(1, parseInt(page) || 1);
-  limit = Math.min(100, Math.max(1, parseInt(limit) || 10));
+  limit = Math.min(200, Math.max(1, parseInt(limit) || 10));
   const offset = (page - 1) * limit;
 
   const columns = await getColumns(env, table);
   const colNames = columns.map((c) => c.name);
 
-  let where = "";
-  let params = [];
+  const clauses = [];
+  const params = [];
+
   if (search) {
     const textCols = columns
-      .filter((c) => (c.type || "").toUpperCase().includes("TEXT"))
+      .filter((c) => (c.type || "").toUpperCase().includes("TEXT") || (c.type || "") === "")
       .map((c) => c.name);
     if (textCols.length) {
-      where = "WHERE " + textCols.map((c) => `${c} LIKE ?`).join(" OR ");
-      params = textCols.map(() => `%${search}%`);
+      clauses.push("(" + textCols.map((c) => `${c} LIKE ?`).join(" OR ") + ")");
+      params.push(...textCols.map(() => `%${search}%`));
     }
   }
+
+  // Filter generik: setiap query param yang cocok nama kolom -> WHERE col = ?
+  // Tidak ada nama field yang di-hardcode di sini.
+  Object.entries(filters).forEach(([key, val]) => {
+    if (colNames.includes(key) && val !== undefined && val !== "") {
+      clauses.push(`${key} = ?`);
+      params.push(val);
+    }
+  });
+
+  const where = clauses.length ? "WHERE " + clauses.join(" AND ") : "";
 
   let orderBy = "";
   if (sort && colNames.includes(sort)) {
@@ -260,12 +304,17 @@ async function handleList({ env, url, params }) {
   const [table] = params;
   await assertTableAllowed(env, table);
   const q = url.searchParams;
+  const filters = {};
+  for (const [key, val] of q.entries()) {
+    if (!RESERVED_QUERY_KEYS.has(key)) filters[key] = val;
+  }
   const { data, meta } = await listData(env, table, {
     page: q.get("page") || 1,
     limit: q.get("limit") || 10,
     search: q.get("search") || "",
     sort: q.get("sort") || undefined,
     order: q.get("order") || "asc",
+    filters,
   });
   return ok(data, meta);
 }
@@ -281,6 +330,7 @@ async function handleGetOne({ env, params }) {
 async function handleCreate({ env, request, params }) {
   const [table] = params;
   await assertTableAllowed(env, table);
+  await assertWritable(env, table);
   const body = await safeJson(request);
   const result = await createData(env, table, body);
   return json({ success: true, data: result }, 201);
@@ -289,6 +339,7 @@ async function handleCreate({ env, request, params }) {
 async function handleUpdate({ env, request, params }) {
   const [table, id] = params;
   await assertTableAllowed(env, table);
+  await assertWritable(env, table);
   const existing = await getOneData(env, table, id);
   if (!existing) throw new HttpError("Data tidak ditemukan", 404);
   const body = await safeJson(request);
@@ -299,10 +350,37 @@ async function handleUpdate({ env, request, params }) {
 async function handleDelete({ env, params }) {
   const [table, id] = params;
   await assertTableAllowed(env, table);
+  await assertWritable(env, table);
   const existing = await getOneData(env, table, id);
   if (!existing) throw new HttpError("Data tidak ditemukan", 404);
   const result = await removeData(env, table, id);
   return ok(result);
+}
+
+/**
+ * Login — memvalidasi email/password terhadap tabel `users`.
+ * Ini tetap "generik" dalam arti hanya memakai konvensi kolom
+ * email/password/status/role yang sudah ada di skema, tanpa
+ * membuat tabel/endpoint khusus per-role.
+ */
+async function handleLogin({ env, request }) {
+  const body = await safeJson(request);
+  const email = (body.email || "").trim().toLowerCase();
+  const password = body.password || "";
+  if (!email || !password) {
+    throw new HttpError("Email dan password wajib diisi", 400);
+  }
+  const row = await env.DB.prepare(`SELECT * FROM users WHERE lower(email) = ?`)
+    .bind(email)
+    .first();
+  if (!row || row.password !== password) {
+    throw new HttpError("Email atau password salah", 401);
+  }
+  if ((row.status || "aktif") !== "aktif") {
+    throw new HttpError("Akun tidak aktif, hubungi admin", 403);
+  }
+  const { password: _pw, ...safeUser } = row;
+  return ok(safeUser);
 }
 
 async function safeJson(request) {
@@ -315,10 +393,11 @@ async function safeJson(request) {
 
 // ---------- Routing table (event driven) ----------
 // Setiap event (method + pattern URL) dipetakan ke satu handler generik.
-// Menambah tabel baru TIDAK perlu menambah routing baru.
+// Menambah tabel/view baru TIDAK perlu menambah routing baru.
 const routes = [
   { method: "GET", pattern: /^\/api\/tables\/?$/, handler: handleTables },
   { method: "GET", pattern: /^\/api\/meta\/([a-zA-Z_][a-zA-Z0-9_]*)\/?$/, handler: handleMeta },
+  { method: "POST", pattern: /^\/api\/login\/?$/, handler: handleLogin },
   { method: "GET", pattern: /^\/api\/([a-zA-Z_][a-zA-Z0-9_]*)\/(\d+)\/?$/, handler: handleGetOne },
   { method: "GET", pattern: /^\/api\/([a-zA-Z_][a-zA-Z0-9_]*)\/?$/, handler: handleList },
   { method: "POST", pattern: /^\/api\/([a-zA-Z_][a-zA-Z0-9_]*)\/?$/, handler: handleCreate },
@@ -336,7 +415,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/" || url.pathname === "/health") {
-      return ok({ status: "ok", app: env.APP_NAME || "Sismadi Microservice" });
+      return ok({ status: "ok", app: env.APP_NAME || "LMS Microservice" });
     }
 
     try {

@@ -1,20 +1,20 @@
-name = "sismadi-microservice"
+name = "lms-microservice"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
 # Deploy dengan:
-#   wrangler d1 create sismadi_db
+#   wrangler d1 create lms_db
 #   (salin database_id hasilnya ke bawah ini)
-#   wrangler d1 execute sismadi_db --remote --file=./schema.sql
+#   wrangler d1 execute lms_db --remote --file=./schema.sql
 #   wrangler deploy
 
 [[d1_databases]]
 binding = "DB"                     # diakses di worker.js sebagai env.DB
-database_name = "gas"
-database_id = "74ad0ce5-19ae-4e52-a0d8-c96579cea754"
+database_name = "lms"
+database_id = "GANTI-DENGAN-DATABASE-ID-ANDA"
 
 [vars]
-APP_NAME = "Sismadi Microservice"
+APP_NAME = "LMS Microservice"
 
 # Opsional: batasi origin frontend yang boleh akses API
 # ganti "*" di worker.js (fungsi corsHeaders) sesuai domain frontend Anda.

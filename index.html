@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sismadi Control</title>
+<title>LMS Control</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
 <script>
-  // Frontend (sismadi.com) dan backend (Worker) ada di domain berbeda,
+  // Frontend dan backend (Worker) bisa ada di domain berbeda,
   // jadi API_BASE harus disebut eksplisit ke URL worker.
   window.API_BASE = "https://gas.sismadi.workers.dev/api";
 </script>
@@ -18,14 +18,14 @@
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">S/</span>
-        <span class="brand-name">Sismadi&nbsp;Control</span>
+        <span class="brand-mark">L/</span>
+        <span class="brand-name">LMS&nbsp;Control</span>
       </div>
       <nav class="nav" id="nav-menu">
-        <!-- di-render dinamis dari GET /api/menu -->
+        <!-- di-render dinamis dari GET /api/menu, difilter per role -->
       </nav>
-      <div class="sidebar-foot">
-        <span class="dot dot--live"></span> API tersambung
+      <div class="sidebar-foot" id="user-box">
+        <!-- di-render dinamis: info sesi (tamu / peserta / instruktur / admin) -->
       </div>
     </aside>
 
