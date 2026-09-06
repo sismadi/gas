@@ -7,6 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
+<script>
+  // Frontend (sismadi.com) dan backend (Worker) ada di domain berbeda,
+  // jadi API_BASE harus disebut eksplisit ke URL worker.
+  window.API_BASE = "https://gas.sismadi.workers.dev/api";
+</script>
 </head>
 <body>
 
